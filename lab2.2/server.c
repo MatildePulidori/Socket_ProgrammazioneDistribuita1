@@ -31,7 +31,10 @@ int main (int argc, char *argv[]) {
 	struct sockaddr_in echoServAddr;
 	struct sockaddr_in echoClientAddr;
 	unsigned int clientAddrLen;
-	char echoBuffer[200];
+	uint32_t tempoClient;
+	uint32_t tempoServer;
+	uint64_t toSend;
+
 	int receiveMsgSize;
 
 	s = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -54,13 +57,29 @@ int main (int argc, char *argv[]) {
 
 	while(1)
 	{
-		printf("Waiting for packets...\n");		
+		printf("Waiting for packets...\n");
 		clientAddrLen = sizeof(echoClientAddr);
-		receiveMsgSize = recvfrom( s, echoBuffer, sizeof(echoBuffer), 0, (struct sockaddr *) &echoClientAddr, &clientAddrLen );
 
-		if( sendto( s, echoBuffer, receiveMsgSize, 0, (struct sockaddr *) &echoClientAddr, sizeof(echoClientAddr) ) != receiveMsgSize )
-			printf("Error in sending response %s.\n", echoBuffer);
+		receiveMsgSize = recvfrom( s, &tempoClient, sizeof(tempoClient), 0, (struct sockaddr *) &echoClientAddr, &clientAddrLen );
+		if(receiveMsgSize!= sizeof(tempoClient)){
+				printf("Error: expected 4 bytes, but received %d bytes \n", receiveMsgSize);
+				continue;
+		}
+		//tempoClient = ntohl((uint32_t)tempoClient);
+		printf("Received time of the client:  %u \n", ntohl((uint32_t)tempoClient));
+		sleep(4);
+		tempoServer = htonl((uint32_t)time(NULL));
+
+		printf("Time of the server to send:  %u \n", ntohl((uint32_t)tempoServer));
+
+
+		toSend = tempoClient;
+		toSend = toSend << 32;
+		toSend = toSend + tempoServer;
+
+
+		if( sendto( s, &toSend , sizeof(toSend), 0, (struct sockaddr *) &echoClientAddr, sizeof(echoClientAddr) ) != sizeof(toSend) )
+			printf("Error in sending response %llu.\n", toSend);
 	}
 
 }
-

@@ -35,6 +35,8 @@ int main(int argc, char ** argv)
 	int correct = 0;
 
 	uint32_t tempo;
+	uint32_t printClient;
+	uint32_t printServer;
 	uint64_t resp;
 
 
@@ -59,9 +61,9 @@ int main(int argc, char ** argv)
 	saddr.sin_port = htons( atoi(argv[2]) );
 
 	// scrivere tempo
-	numerotempo  = htonl((unsigned int)time(NULL));
-
-
+	tempo  = (uint32_t)time(NULL);
+	tempo  = htonl(tempo);
+	
 	// invio datagramma
 	if( sendto( s, &tempo, (size_t) sizeof(tempo), 0, (const struct sockaddr *)&saddr, sizeof(saddr)) != (size_t) sizeof(tempo) )
 	{
@@ -69,8 +71,7 @@ int main(int argc, char ** argv)
 		return -1;
 	}
 
-	// stampa di cio che ho inviato
-	printf("Inviato tempo : %d \n", (int) time(NULL));
+	printf("Tempo inviato: %u \n", tempo);
 
 
 	// controllo di ricevere qualcosa entro un timeout di 3 secondi, per al massimo 4 volte
@@ -103,7 +104,9 @@ int main(int argc, char ** argv)
 						return -4;
 					}
 					// stampa cio che viene ricevuto
-					printf("Response %llu\n", resp );
+					printClient = (resp & 0xFFFFFFFF00000000) >> 32;
+					printServer = resp & 0x00000000FFFFFFFF;
+					printf("Response client-> %u , server-> %u \n", ntohl((uint32_t)printClient),ntohl((uint32_t)printServer) );
 					correct = 1;
 				}
 }
