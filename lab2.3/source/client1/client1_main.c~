@@ -26,14 +26,9 @@ int main (int argc, char *argv[])
 	int s;
 	int result;
 	char buf[100];
-	uint8_t answer[DEFAULT_DIM];
-
+	uint8_t received[DEFAULT_DIM];
 	FILE *file_toWrite;
 	char *startptr;
-	int bytes_rec = 0;
-
-
-
 
 	s = socket(PF_INET,SOCK_STREAM,IPPROTO_TCP);
 	if( s < 0 )
@@ -59,14 +54,14 @@ int main (int argc, char *argv[])
 		return -3;
 	}
 
-	strcpy(buf, "GET z.txt\r\n");
+	strcpy(buf, "GET z.pdf\r\n");
 	if( send( s, buf, (size_t)(sizeof(buf)), 0 ) != (size_t) sizeof(buf) )
 	{
 		printf("Error in sending parameters to server.\n");
 		return -1;
 	}
 
-	int val = recv(s, answer, 5*sizeof(char) + sizeof(uint32_t), 0); // 1- Receive +OK\r\nBYTES
+	int val = recv(s, received, 5*sizeof(char) + DEFAULT_DIM, 0);
 	if (val==0){
 		printf("La connessione e' stata chiusa.\n");
 		return -4;
@@ -75,14 +70,12 @@ int main (int argc, char *argv[])
 		printf ("Error in receiving bytes from server.\n");
 		return -5;
 	}
-
-	printf(" Received %d  bytes \n", val );
-	file_toWrite = fopen("z.txt", "wb");
-	startptr = (char *)(answer) + 5*sizeof(char) ;
-	printf("%s\n",answer);
+	printf("%d -> %s \n", val , received);
+	file_toWrite = fopen("z.pdf", "wb");
+	startptr = (char *)(received) + 5*sizeof(char)+4;
 	fwrite(startptr, val-5*sizeof(char)-4, 1, file_toWrite);
 	fclose(file_toWrite);
-
+	
 
 return 0;
 }
