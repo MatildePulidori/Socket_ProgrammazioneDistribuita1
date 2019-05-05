@@ -16,7 +16,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define DEFAULT_DIM 4096
+#define BUFF_DIM 4096
 
 char *prog_name;
 
@@ -25,46 +25,59 @@ int main (int argc, char *argv[])
 	struct sockaddr_in saddr;
 	int s;
 	int result;
-	char buf[100];
-	uint8_t answer[DEFAULT_DIM];
+	char *bufferToSend;
+	uint8_t answer[BUFF_DIM];
 
 	FILE *file_toWrite;
 	char *startptr;
-	int bytes_rec = 0;
+	int bytes_rec = 0, tot=0, end=0;
+	uint32_t fileDimension=0;
 
 
-
+	if (argc != 4){
+		printf("Error in parameters.\n");
+		return -1;
+	}
 
 	s = socket(PF_INET,SOCK_STREAM,IPPROTO_TCP);
 	if( s < 0 )
 	{
 		printf("Error in creating socket.\n");
-		return -1;
+		return -2;
 	}
 
-	// campi del socket
+	// Socke info
 	saddr.sin_family = AF_INET;
-	if( inet_aton(argv[1],&(saddr.sin_addr)) == 0 )
+	if( inet_aton(argv[1],&(saddr.sin_addr)) == 0 ){
 		printf("Error in inet_aton() for address %s.\n", argv[1]);
+	}
 	saddr.sin_port = htons( atoi(argv[2]) );
 
+	// Connect
 	result = connect( s, (struct sockaddr *) &saddr, sizeof(saddr) );
 	if( result == -1 ){
 		printf("Error in establishing a connection to %s on port %s.\n", argv[1], argv[2]);
 
 		if( close(s) != 0 ){
 			printf("Error in closing socket.\n");
-			return -2;
+			return -3;
 		}
-		return -3;
+		return -4;
 	}
 
-	strcpy(buf, "GET z.txt\r\n");
-	if( send( s, buf, (size_t)(sizeof(buf)), 0 ) != (size_t) sizeof(buf) )
-	{
+	bufferToSend = malloc(4 + strlen(argv[3])*sizeof(char) + 2);
+	strcpy(bufferToSend, "GET ");
+	strcat(bufferToSend, argv[3]);
+	bufferToSend += 4 + strlen(argv[3]);
+	*(bufferToSend)='\r';
+	*(bufferToSend + 1) = '\n';
+	bufferToSend -= strlen(argv[3]) + 4;
+
+	if( ( send( s, bufferToSend, (size_t)(strlen(bufferToSend)), 0 )) != (size_t) strlen(bufferToSend) ){
 		printf("Error in sending parameters to server.\n");
 		return -1;
 	}
+
 
 	int val = recv(s, answer, 5*sizeof(char) + sizeof(uint32_t), 0); // 1- Receive +OK\r\nBYTES
 	if (val==0){
@@ -75,9 +88,32 @@ int main (int argc, char *argv[])
 		printf ("Error in receiving bytes from server.\n");
 		return -5;
 	}
+	printf("%s\n",answer );
+	bytes_rec += val;
 
-	printf(" Received %d  bytes \n", val );
-	file_toWrite = fopen("z.txt", "wb");
+	for (int i=0, j=6; i<4; i++, j++){  // Mem the file dimension in a variable
+		fileDimension += answer[j];
+		printf("%c\n", answer[j] );
+		if (i<3){
+			fileDimension <<=8;
+		}
+	}
+	printf("File %d  bytes \n", fileDimension );
+
+
+	if ( (file_toWrite = fopen(argv[3], "wb"))==NULL){ // 2 -
+		printf("Error in opening file.\n");
+		free(bufferToSend);
+		return -6;
+	}
+	while(end==0){
+		if (tot+BUFF_DIM>= fileDimension){
+				end=1;
+			}
+
+	}
+
+
 	startptr = (char *)(answer) + 5*sizeof(char) ;
 	printf("%s\n",answer);
 	fwrite(startptr, val-5*sizeof(char)-4, 1, file_toWrite);
