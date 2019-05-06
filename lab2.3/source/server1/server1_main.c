@@ -184,6 +184,10 @@ int main (int argc, char *argv[])
 		file_toFind = fopen(fname, "rb");
 		if (file_toFind==NULL){
 			printf("File %s does not exists\n", fname );
+			if (send(sock, error, sizeof(error), 0)!= sizeof(error)){
+				printf("Error in sending %s\n", error );
+				continue;
+			}
 			continue;
 		}
 
@@ -197,7 +201,8 @@ int main (int argc, char *argv[])
 
 		//ANSWER TO THE CLIENT
 
-		if (tot + 5*sizeof(char)>= BUFF_DIM){ // se +OK\r\n non entra ... errore e poi svuoto buffer answer
+		if (tot + 5*sizeof(char)> BUFF_DIM){ // se +OK\r\n non entra ... errore e poi svuoto buffer answer
+
 			if (sendn(sock, answer, tot, flag)!= tot - 5*sizeof(char)){
 				printf("Error in sending response to the client.\n");
 				continue;
@@ -207,7 +212,7 @@ int main (int argc, char *argv[])
 			tot=0;
 		}
 
-		//strcpy((char *)answer, "+OK\r\n");   // scrivo su buffer answer +OK\r\n
+		strcpy((char *)answer, "+OK\r\n");   // scrivo su buffer answer +OK\r\n
 		tot += 5*sizeof(char);
 
 		uint32_t sizeFileReceived = infos.st_size; // file dimension, in bytes
@@ -215,7 +220,7 @@ int main (int argc, char *argv[])
 				printf("File dimension does not fit 32bit. \n");
 				continue;
 		}
-		if (tot+sizeof(uint32_t)>=BUFF_DIM){ // se la dimensione del file BYTES non sta nel buffer answer ..
+		if (tot+sizeof(uint32_t)>BUFF_DIM){ // se la dimensione del file BYTES non sta nel buffer answer ..
 			if (sendn(sock, answer, tot, flag)!= tot-sizeof(uint32_t)){ // errore e poi svuoto il buffer answer
 				printf("Error in sending response to client.\n");
 				continue;
@@ -268,7 +273,12 @@ int main (int argc, char *argv[])
 			}else{
 				answer += n;
 			}
+
 		}
+
+
+
+
 		if(tot +sizeof(uint32_t)>= BUFF_DIM){
 			if (sendn(sock, answer, tot, flag)!=tot-sizeof(uint32_t)){
 				printf("Error in sending response to client.\n");
@@ -279,7 +289,8 @@ int main (int argc, char *argv[])
 			tot=0;
 		}
 		else{
-			answer = startptr;
+			printf("voilà\n" );
+			//answer = startptr;
 			if (sendn(sock, answer, tot, flag)!= tot){
 				printf("Error sending data.\n" );
 			}

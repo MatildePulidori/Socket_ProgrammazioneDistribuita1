@@ -29,7 +29,7 @@ int main (int argc, char *argv[])
 	uint8_t answer[BUFF_DIM];
 
 	FILE *file_toWrite;
-	int bytes_rec = 0, tot=0, end=0, toRead=0;
+	int bytes_rec = 0, tot=0, end=0, toRead=0, written=0;
 	uint32_t fileDimension=0, fileLastModified=0;
 
 
@@ -96,20 +96,27 @@ int main (int argc, char *argv[])
 		}
 	}
 	printf("File %d  bytes \n", fileDimension);
-	memset(answer, 0, BUFF_DIM);
+	//memset(answer, 0, BUFF_DIM);
 
 	if ( (file_toWrite = fopen(argv[3], "wb"))==NULL){ // 2 - Open a new file to write (or update if it exists already)
 		printf("Error in opening file.\n");
 		free(bufferToSend);
 		return -6;
 	}
+	int d = 0;
 	while(end==0){
-		if (tot+BUFF_DIM>= fileDimension){
+		d ++;
+		printf("ciclo numero: %d\n",d );
+
+		if (tot+BUFF_DIM> fileDimension){
 				toRead = fileDimension-tot;
+				printf("toRead: %d\n",toRead );
 				end=1;
 		} else {
-			toRead = BUFF_DIM;
+				toRead = BUFF_DIM;
 		}
+
+
 		val = recv(s, answer, toRead, 0);
 		if (val==0){
 			printf("La connessione e' stata chiusa.\n");
@@ -120,18 +127,22 @@ int main (int argc, char *argv[])
 			return -5;
 		}
 
-		if ( 	fwrite(answer, sizeof(char), val, file_toWrite) != val ){
+		if ( 	(written= fwrite(answer, sizeof(char), val, file_toWrite)) != val ){
 			printf("Error in writing on file \n");
 		}
+		printf("written: %d\n", written );
 		tot +=val;
+		printf("tot: %d \n", tot);
 		bytes_rec += val;
+		printf("bytes_rec: %d \n", bytes_rec);
 		memset(answer, 0, BUFF_DIM);
-
+		printf("\n ---------------------- \n" );
 	}
 
 	free(bufferToSend);
 	fclose(file_toWrite);
 	close(s);
+
 
 return 0;
 }
