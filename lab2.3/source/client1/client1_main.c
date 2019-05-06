@@ -29,9 +29,8 @@ int main (int argc, char *argv[])
 	uint8_t answer[BUFF_DIM];
 
 	FILE *file_toWrite;
-	char *startptr;
-	int bytes_rec = 0, tot=0, end=0;
-	uint32_t fileDimension=0;
+	int bytes_rec = 0, tot=0, end=0, toRead=0;
+	uint32_t fileDimension=0, fileLastModified=0;
 
 
 	if (argc != 4){
@@ -88,37 +87,51 @@ int main (int argc, char *argv[])
 		printf ("Error in receiving bytes from server.\n");
 		return -5;
 	}
-	printf("%s\n",answer );
 	bytes_rec += val;
 
-	for (int i=0, j=6; i<4; i++, j++){  // Mem the file dimension in a variable
+	for (int i=0, j=5; i<4; i++, j++){  // Mem the file dimension in a variable
 		fileDimension += answer[j];
-		printf("%c\n", answer[j] );
 		if (i<3){
 			fileDimension <<=8;
 		}
 	}
-	printf("File %d  bytes \n", fileDimension );
+	printf("File %d  bytes \n", fileDimension);
+	memset(answer, 0, BUFF_DIM);
 
-
-	if ( (file_toWrite = fopen(argv[3], "wb"))==NULL){ // 2 -
+	if ( (file_toWrite = fopen(argv[3], "wb"))==NULL){ // 2 - Open a new file to write (or update if it exists already)
 		printf("Error in opening file.\n");
 		free(bufferToSend);
 		return -6;
 	}
 	while(end==0){
 		if (tot+BUFF_DIM>= fileDimension){
+				toRead = fileDimension-tot;
 				end=1;
-			}
+		} else {
+			toRead = BUFF_DIM;
+		}
+		val = recv(s, answer, toRead, 0);
+		if (val==0){
+			printf("La connessione e' stata chiusa.\n");
+			return -4;
+
+		} if (val<0){
+			printf ("Error in receiving bytes from server.\n");
+			return -5;
+		}
+
+		if ( 	fwrite(answer, sizeof(char), val, file_toWrite) != val ){
+			printf("Error in writing on file \n");
+		}
+		tot +=val;
+		bytes_rec += val;
+		memset(answer, 0, BUFF_DIM);
 
 	}
 
-
-	startptr = (char *)(answer) + 5*sizeof(char) ;
-	printf("%s\n",answer);
-	fwrite(startptr, val-5*sizeof(char)-4, 1, file_toWrite);
+	free(bufferToSend);
 	fclose(file_toWrite);
-
+	close(s);
 
 return 0;
 }

@@ -59,7 +59,7 @@ int main (int argc, char *argv[])
 	struct stat infos;
   uint8_t *answer, *startptr;
 	int tot=0, n =0, sent=0;
-	char sizeFile[MAX_BYTES];
+	uint8_t sizeByte = 0;
 	int j=0, i=0;
 
 
@@ -87,9 +87,10 @@ int main (int argc, char *argv[])
 
 
 
+	answer = (uint8_t *)malloc( BUFF_DIM );
 	while (1){
 
-		answer = (uint8_t *)malloc( BUFF_DIM );
+
 		memset(answer, 0, BUFF_DIM);
 
 		// ACCEPT
@@ -111,7 +112,6 @@ int main (int argc, char *argv[])
 			printf("No more data to read and client closed the connection of this socket. \n");
 			continue;
 		}
-		printf("%s\n",buffer );
 
 		// Inizio controlli sulla stringa ricevuta dal client
 		// che dovrebbe essere <GET filenameCRLF>
@@ -179,7 +179,7 @@ int main (int argc, char *argv[])
 		}
 
 		// In fname there is the name of the file the server have to send to the client
-		printf("File name is: ' %s '\n", fname);
+		printf("File name is: '%s'\n", fname);
 		// Apriamo il file in lettura
 		file_toFind = fopen(fname, "rb");
 		if (file_toFind==NULL){
@@ -206,8 +206,8 @@ int main (int argc, char *argv[])
 			sent+=tot;
 			tot=0;
 		}
-		printf("indirizzo 1 : %p \n", answer);
-		strcpy((char *)answer, "+OK\r\n");   // scrivo su buffer answer +OK\r\n
+
+		//strcpy((char *)answer, "+OK\r\n");   // scrivo su buffer answer +OK\r\n
 		tot += 5*sizeof(char);
 
 		uint32_t sizeFileReceived = infos.st_size; // file dimension, in bytes
@@ -226,25 +226,20 @@ int main (int argc, char *argv[])
 			tot=0;
 			j=0;
 		}
-		
-		printf("%s, indirizzo a: %p\n", answer, answer );
-		itoa((int) sizeFileReceived, sizeFile);  // scrivo sul buffer answer (+OK\r\n)BYTES
-		printf("dimensione file : %s\n", sizeFile);
+
+		 // scrivo sul buffer answer (+OK\r\n)BYTES
+		printf("dimensione file : %u\n", sizeFileReceived);
 		startptr = answer; // puntatore al blocco di memoria dove viene salvata la risposta, prima di +OK\r\n
 
 		j = 5;
 		int offset=24;
 		uint32_t mask  = 0xFF000000;
 
-		for(i = 0; i < 4; i++, mask >>= 8, offset -= 8) {
-					answer[j++] = (uint8_t)((sizeFileReceived & mask) >> offset);
-						printf("%d ->  %x\n", j, answer[j]);
-		}
-
-		printf("indirizzo b : %p \n", answer);
-
+		for(i = 0; i < 4; i++, mask >>= 8, offset -= 8, j++) {
+					sizeByte = (sizeFileReceived & mask)>>offset ;
+					answer[j] = sizeByte;
+		};
 		tot += sizeof(uint32_t);
-
 		if ((tot+MAX_LINE)>=BUFF_DIM){      // invio answer +OK\r\nBYTES
 			if(sendn(sock, answer, tot, flag)!=tot){
 				printf("Error in sending response to client.\n");
@@ -253,7 +248,7 @@ int main (int argc, char *argv[])
 			sent+=tot;
 			tot=0;
 		}
-		printf("oioi %s\n", answer);
+
 
 		answer += tot; // metto answer come puntatore alla stringa dopo OK\r\nBYTES
 		printf("DOCUMENTO: \n");
@@ -262,7 +257,6 @@ int main (int argc, char *argv[])
 			tot+=n;
 			if ((tot+MAX_LINE)>=BUFF_DIM){
 				answer = startptr;
-				printf("cc, %s\n", answer);
 				if (sendn(sock, answer, tot, flag)!= tot){
 					printf("Error in sending response to client.\n");
 					continue;
@@ -286,15 +280,15 @@ int main (int argc, char *argv[])
 		}
 		else{
 			answer = startptr;
-			printf("ee, %s\n", answer);
 			if (sendn(sock, answer, tot, flag)!= tot){
 				printf("Error sending data.\n" );
 			}
 		}
-		answer = startptr;
-		free(answer);
+
 
 	}
+		answer = startptr;
+		free(answer);
 		printf("Closing file ' %s '.\n", fname);
 		fclose(file_toFind);
 
