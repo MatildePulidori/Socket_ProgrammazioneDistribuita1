@@ -226,6 +226,7 @@ int main (int argc, char *argv[])
 			tot=0;
 			j=0;
 		}
+		
 		printf("%s, indirizzo a: %p\n", answer, answer );
 		itoa((int) sizeFileReceived, sizeFile);  // scrivo sul buffer answer (+OK\r\n)BYTES
 		printf("dimensione file : %s\n", sizeFile);
