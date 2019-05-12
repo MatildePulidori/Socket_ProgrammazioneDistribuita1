@@ -266,7 +266,6 @@ int main (int argc, char *argv[])
 
 				while( (n = fread(answer, sizeof(char), MAX_LINE, file_toFind) ) > 0 ) {
 					tot+=n;
-					printf("%d", n);
 					if ((tot+MAX_LINE)>=BUFF_DIM){
 						answer = startptr;
 						if (sendn(sock, answer, tot, flag)!= tot){
@@ -279,11 +278,9 @@ int main (int argc, char *argv[])
 
 					}else{
 						answer += n;
-						printf("%d", n);
 					}
 				}
-
-
+				
 				answer = startptr;
 				uint32_t timestampFileToSend = infos.st_ctime;
 				if (timestampFileToSend> 0xFFFFFFFF){
@@ -306,9 +303,9 @@ int main (int argc, char *argv[])
 
 						mask = 0xFF000000;
 						offset=24;
-						answer = startptr;
-						for(i=0, j=0 ; i<4; mask>>=8, offset-=8){
-							answer[j+tot]=((timestampFileToSend & mask)>> offset);
+						j=tot;
+						for(i=0; i<4; mask>>=8, offset-=8, j++, i++){
+							answer[j]=((timestampFileToSend & mask)>> offset);
 						}
 						tot += sizeof(uint32_t);
 						if (sendn(sock, answer, tot, flag)!= tot){

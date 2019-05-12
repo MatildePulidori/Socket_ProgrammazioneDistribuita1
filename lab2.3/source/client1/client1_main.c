@@ -191,9 +191,10 @@ int main (int argc, char *argv[])
 						return -6;
 					}
 				}
-				printf("%s\n", answer);
+				printf("%d\n", val);
 				for(j=0; j<4; j++){
-					fileLastModified = answer[j];
+					fileLastModified += answer[j];
+					printf("%hhu\n", fileLastModified);
 					if (j<3){
 						fileLastModified <<= 8;
 					}
