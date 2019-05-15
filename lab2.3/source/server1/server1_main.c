@@ -12,11 +12,12 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
+#include "../sockwrap.h"
+
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
 #include <sys/stat.h>
-
 
 #define LISTEN_BACKLOG 15
 #define MAX_LENGTH_FILENAME 255
@@ -36,8 +37,6 @@ int flag= MSG_NOSIGNAL;
 #endif
 
 
-void reverse (char *s);
-void itoa(int n, char *s);
 int sendn(int sock, uint8_t *ptr, size_t nbytes, int flags);
 char *prog_name;
 
@@ -55,9 +54,13 @@ int main (int argc, char *argv[])
 	int count = 0;
 	char error[] = "-ERR\r\n";
 
+	fd_set cset;
+	struct timeval tval;
+	int t = 15;
+
 	FILE *file_toFind;
 	struct stat infos;
-  uint8_t *answer, *startptr;
+  	uint8_t *answer, *startptr;
 	int tot=0, n =0, sent=0;
 	uint8_t sizeByte = 0;
 	int j=0, i=0;
@@ -89,6 +92,7 @@ int main (int argc, char *argv[])
 	while (1){
 		tot = 0;
 		sent = 0;
+		memset(buffer, 0, MAX_LENGTH_FILENAME+MAX_INPUT);
 		memset(answer, 0, BUFF_DIM);
 		printf("Waiting a connection ...\n");
 		// ACCEPT
@@ -97,11 +101,28 @@ int main (int argc, char *argv[])
 			continue;
 		}
 
+
+
+
 		while(1){
 
-				// RECEIVING
-				sizeMsgReceived = recv(sock, buffer, (size_t)MAX_INPUT+MAX_LENGTH_FILENAME, 0);
+				// TIMER 15 secondi 
+				/*t = 15;
+				FD_ZERO(&cset);
+				tval.tv_sec= t;
+				tval.tv_usec= 0;
+				FD_SET(s, &cset);
+				if ( (n= select(FD_SETSIZE, &cset, NULL, NULL, &tval) )== -1){
+					printf("Errore in select()\n");
+					return -4;
 
+				} else if (n==0){
+					printf ("Timeout %d secs expired. Try again. \n ", t);
+					return -5;
+				}*/
+				// RECEIVING
+				sizeMsgReceived = Readline(sock, buffer, (size_t)MAX_INPUT+MAX_LENGTH_FILENAME);
+				printf("buffer %p\n", buffer);
 				if ( sizeMsgReceived <0){  //Errore nella ricezione
 					printf("Error in receiving data. \n");
 					if (send(sock, error, sizeof(error), 0)!= sizeof(error)){ // vedi sopra
@@ -122,6 +143,8 @@ int main (int argc, char *argv[])
 
 				// 1- controllo GET
 				ptr = strstr(buffer, "GET");
+				printf("buffer %p\n", buffer);
+				printf("ptr %p\n", ptr);
 				if (ptr == NULL){
 					printf("Missing GET command. \n");
 					// TO DO -> -ERRCRLF
@@ -153,8 +176,11 @@ int main (int argc, char *argv[])
 					}
 					break;
 				}
-				ptr++;
+
+				
+				ptr++; // ptr dovrebbe puntare al filename 
 				for (; (*ptr!='\r' && *(ptr+1)!='\n') && count<sizeMsgReceived; ptr++, count++);
+
 
 				// 3- Controllo che in fondo ci sia CRLF
 				if(count>sizeMsgReceived){
@@ -316,7 +342,8 @@ int main (int argc, char *argv[])
 						sent+=tot;
 						tot=0;
 				}
-				printf("File sent all.\n");
+				fclose(file_toFind);
+				printf("File %s sent all.\n", fname);
 
 		}
 	}
@@ -328,36 +355,6 @@ int main (int argc, char *argv[])
 
 
 // ---------------------------------------------------------------------------
-
-void reverse (char *s){
-	int c, i, j;
-
-  	for (i=0, j=strlen(s)-1; i<j; i++, j--)  {
-    	c = s[i];
-    	s[i] = s[j];
-    	s[j] = c;
-  	}
-}
-
-
-void itoa(int n, char *s){
-  int i, sign;
-
-  if ((sign = n)<0){
-    n = -n;
-  }
-  i = 0;
-  do {
-    	s[i++] = n%10 + '0';
-  }
-  while ((n /= 10) > 0);
-  if (sign<0){
-  	s[i++] = '-';
-  }
-  s[i] = '\0';
-  reverse(s);
-}
-
 
 int sendn(int sock, uint8_t *ptr, size_t nbytes, int flags){
 	size_t nleft;
@@ -374,4 +371,5 @@ int sendn(int sock, uint8_t *ptr, size_t nbytes, int flags){
 	}
 
     return (nbytes - nleft);
-}
+	}
+

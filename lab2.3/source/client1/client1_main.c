@@ -73,6 +73,7 @@ int main (int argc, char *argv[])
 	for (k=3; k<argc; k++){
 		
 		// alloco dinamicamente un buffer in cui faccio la richiesta 'GET filename\r\n'
+		
 		bufferToSend = malloc(4 + strlen(argv[k])*sizeof(char) + 2);
 		strcpy(bufferToSend, "GET ");
 		strcat(bufferToSend, argv[k]);
@@ -194,7 +195,7 @@ int main (int argc, char *argv[])
 				printf("%d\n", val);
 				for(j=0; j<4; j++){
 					fileLastModified += answer[j];
-					printf("%hhu\n", fileLastModified);
+					printf("%u\n", fileLastModified);
 					if (j<3){
 						fileLastModified <<= 8;
 					}
