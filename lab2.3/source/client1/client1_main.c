@@ -68,7 +68,7 @@ int main (int argc, char *argv[])
 		}
 		return -4;
 	}
-	printf("numero argomenti %d \n", argc);
+	printf("\n");
 
 	for (k=3; k<argc; k++){
 		
@@ -81,7 +81,7 @@ int main (int argc, char *argv[])
 		*(bufferToSend)='\r';
 		*(bufferToSend + 1) = '\n';
 		bufferToSend -= strlen(argv[k]) + 4;
-
+		sleep(20);
 		// 1 - invio il buffer al server in cui chiedo il file
 		if( ( send( s, bufferToSend, (size_t)(4 + strlen(argv[k])*sizeof(char) + 2), 0 )) != (size_t)(4 + strlen(argv[k])*sizeof(char) + 2) ){
 			perror("");
@@ -133,7 +133,7 @@ int main (int argc, char *argv[])
 						fileDimension <<=8;
 					}
 				}
-				printf("Dimensione file: %d  bytes \n", fileDimension);
+				printf("Dimensione file '%s' : %d  bytes.\n", argv[k], fileDimension);
 				memset(answer, 0, BUFF_DIM);
 				// 2 - Apro un nuovo file in cui scrivere (o lo aggiorno se esiste gia)
 				if ( (file_toWrite = fopen(argv[k], "wb"))==NULL){ 
@@ -176,7 +176,7 @@ int main (int argc, char *argv[])
 					memset(answer, 0, BUFF_DIM);
 				}
 				fclose(file_toWrite);
-				printf("File closed\n");
+				//printf("File '%s' closed.\n", argv[k]);
 
 				val = recv(s, answer, sizeof(uint32_t), 0);
 				if (val==0){
@@ -192,10 +192,9 @@ int main (int argc, char *argv[])
 						return -6;
 					}
 				}
-				printf("%d\n", val);
+				
 				for(j=0; j<4; j++){
 					fileLastModified += answer[j];
-					printf("%u\n", fileLastModified);
 					if (j<3){
 						fileLastModified <<= 8;
 					}
@@ -206,7 +205,7 @@ int main (int argc, char *argv[])
 
 
 				memset(answer, 0, BUFF_DIM);
-				printf("File %s downloaded: %d bytes, %d timestamp \n\n", argv[k], fileDimension, fileLastModified);
+				printf("File %s downloaded: %d bytes, %d timestamp.\n\n", argv[k], fileDimension, fileLastModified);
 		}
 	}
 	close(s);

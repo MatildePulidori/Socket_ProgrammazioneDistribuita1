@@ -94,7 +94,7 @@ int main (int argc, char *argv[])
 		sent = 0;
 		memset(buffer, 0, MAX_LENGTH_FILENAME+MAX_INPUT);
 		memset(answer, 0, BUFF_DIM);
-		printf("Waiting a connection ...\n");
+		printf("Waiting a connection ...\n\n");
 		// ACCEPT
 		if ( (sock = accept(s, (struct sockaddr *) &serverAddr, &serverAddrLength)) <0){
 			printf("Connection not accepted already. \n");
@@ -107,22 +107,23 @@ int main (int argc, char *argv[])
 		while(1){
 
 				// TIMER 15 secondi 
-				/*t = 15;
 				FD_ZERO(&cset);
 				tval.tv_sec= t;
 				tval.tv_usec= 0;
-				FD_SET(s, &cset);
+				FD_SET(sock, &cset);
+
 				if ( (n= select(FD_SETSIZE, &cset, NULL, NULL, &tval) )== -1){
 					printf("Errore in select()\n");
-					return -4;
+					break;
 
 				} else if (n==0){
 					printf ("Timeout %d secs expired. Try again. \n ", t);
-					return -5;
-				}*/
+					break;
+				}
+
 				// RECEIVING
 				sizeMsgReceived = Readline(sock, buffer, (size_t)MAX_INPUT+MAX_LENGTH_FILENAME);
-				printf("buffer %p\n", buffer);
+				
 				if ( sizeMsgReceived <0){  //Errore nella ricezione
 					printf("Error in receiving data. \n");
 					if (send(sock, error, sizeof(error), 0)!= sizeof(error)){ // vedi sopra
@@ -132,7 +133,7 @@ int main (int argc, char *argv[])
 					break;
 				}
 				if (sizeMsgReceived == 0){ //Non c'è più nulla da leggere
-					printf("No more data to read and client closed the connection of this socket. \n");
+					printf("No more data to read and client closed the connection of this socket. \n\n");
 					close(sock);
 					break;
 				}
@@ -143,8 +144,6 @@ int main (int argc, char *argv[])
 
 				// 1- controllo GET
 				ptr = strstr(buffer, "GET");
-				printf("buffer %p\n", buffer);
-				printf("ptr %p\n", ptr);
 				if (ptr == NULL){
 					printf("Missing GET command. \n");
 					// TO DO -> -ERRCRLF
@@ -288,7 +287,7 @@ int main (int argc, char *argv[])
 
 
 				answer += tot; // metto answer come puntatore alla stringa dopo OK\r\nBYTES
-				printf("DOCUMENTO: \n");
+				//printf("DOCUMENTO: \n");
 
 				while( (n = fread(answer, sizeof(char), MAX_LINE, file_toFind) ) > 0 ) {
 					tot+=n;
@@ -343,7 +342,7 @@ int main (int argc, char *argv[])
 						tot=0;
 				}
 				fclose(file_toFind);
-				printf("File %s sent all.\n", fname);
+				printf("File '%s' sent all.\n\n", fname);
 
 		}
 	}
