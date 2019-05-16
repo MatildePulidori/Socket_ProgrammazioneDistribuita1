@@ -81,7 +81,7 @@ int main (int argc, char *argv[])
 		*(bufferToSend)='\r';
 		*(bufferToSend + 1) = '\n';
 		bufferToSend -= strlen(argv[k]) + 4;
-		sleep(20);
+		
 		// 1 - invio il buffer al server in cui chiedo il file
 		if( ( send( s, bufferToSend, (size_t)(4 + strlen(argv[k])*sizeof(char) + 2), 0 )) != (size_t)(4 + strlen(argv[k])*sizeof(char) + 2) ){
 			perror("");
@@ -205,7 +205,7 @@ int main (int argc, char *argv[])
 
 
 				memset(answer, 0, BUFF_DIM);
-				printf("File %s downloaded: %d bytes, %d timestamp.\n\n", argv[k], fileDimension, fileLastModified);
+				printf("\nFile %s downloaded: %d bytes, %d timestamp.\n\n", argv[k], fileDimension, fileLastModified);
 		}
 	}
 	close(s);
