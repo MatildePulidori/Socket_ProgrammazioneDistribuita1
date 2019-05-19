@@ -54,6 +54,7 @@ int main (int argc, char *argv[])
 	saddr.sin_family = AF_INET;
 	if( inet_aton(argv[1],&(saddr.sin_addr)) == 0 ){
 		printf("Error in inet_aton() for address %s.\n", argv[1]);
+		return -2;
 	}
 	saddr.sin_port = htons( atoi(argv[2]) );
 
@@ -68,7 +69,7 @@ int main (int argc, char *argv[])
 		}
 		return -4;
 	}
-	printf("\n");
+	
 
 	for (k=3; k<argc; k++){
 		
@@ -83,66 +84,74 @@ int main (int argc, char *argv[])
 		bufferToSend -= strlen(argv[k]) + 4;
 		
 		// 1 - invio il buffer al server in cui chiedo il file
-		if( ( send( s, bufferToSend, (size_t)(4 + strlen(argv[k])*sizeof(char) + 2), 0 )) != (size_t)(4 + strlen(argv[k])*sizeof(char) + 2) ){
-			perror("");
+		if( ( send( s, bufferToSend, (size_t)(4 + strlen(argv[k])*sizeof(char)+2 ), 0 )) != (size_t)(4 + strlen(argv[k])*sizeof(char) +2) ){
 			printf("Error in sending parameters to server.\n");
-			return -1;
+			return -5;
 		}
 		memset(answer, 0, BUFF_DIM);
-		// attendo la risposta del server
-
+		
 		fileDimension=0;
 		fileLastModified=0;
 		end=0;
 		bytes_rec=0;
 		tot=0;
 
-
+		// timer 
 		FD_ZERO(&cset);
 		tval.tv_sec= t;
 		tval.tv_usec= 0;
 		FD_SET(s, &cset);
+
 			if ( (n= select(FD_SETSIZE, &cset, NULL, NULL, &tval) )== -1){
 				printf("Errore in select()\n");
-				return -2;
+				close(s);
+				return -6;
 
 			} else if (n==0){
-				printf ("Timeout %d secs expired. Try again. \n ", t);
-				return -3;
+				printf ("Timeout %d secs expired. Try again. \n", t);
+				close(s);
+				return -7;
 			} else {
 
-
-				int val = recv(s, answer, 5*sizeof(char) + sizeof(uint32_t), 0); // 1- Receive +OK\r\nBYTES
+				 // 1 -  +OK\r\nBYTES
+				int val = recv(s, answer, 5*sizeof(char) + sizeof(uint32_t), 0);
 				if (val==0){
-					printf("La connessione e' stata chiusa.\n");
-					return -4;
+					printf("Connection closed.\n");
+					close(s);
+					return -8;
 
 				} else if (val<0){
 					printf ("Error in receiving bytes from server.\n");
-					return -5;
-				} else if (val == 7){
+					close(s);
+					return -9;
+				} else if (strcmp((const char*)answer, error)==0){
 					// errore da parte del server
-					if(strcmp((const char*)answer, error)==0){
-						printf("-ERR \n");
-						return -6;
-					}
+						printf("%s",error);
+						close(s);
+						return -4;
 				}
-				for (i=0, j=5; i<4; i++, j++){  // memorizzo la dimensione del file in una variabile di tipo int a 32bit
+
+				 // 2 - +OK\r\n.B1.B2.B3.B4
+				for (i=0, j=5; i<4; i++, j++){  
 					fileDimension += answer[j];
 					if (i<3){
 						fileDimension <<=8;
 					}
 				}
-				printf("Dimensione file '%s' : %d  bytes.\n", argv[k], fileDimension);
+
+				//printf("Dimensione file '%s' : %d  bytes.\n", argv[k], fileDimension);
 				memset(answer, 0, BUFF_DIM);
-				// 2 - Apro un nuovo file in cui scrivere (o lo aggiorno se esiste gia)
+
+				// 3 - New file or open the existing one to update it
 				if ( (file_toWrite = fopen(argv[k], "wb"))==NULL){ 
 					printf("Error in opening file.\n");
 					free(bufferToSend);
-					return -7;
+					close(s);
+					return -11;
 				}
+
 				while(end==0){
-					
+
 					if (tot+BUFF_DIM>= fileDimension){
 							toRead = fileDimension-tot;
 							end=1;
@@ -150,47 +159,78 @@ int main (int argc, char *argv[])
 							toRead = BUFF_DIM;
 					}
 
-					// 3 - Ricevo i bytes che contengono il contenuto 
+					FD_ZERO(&cset);
+					tval.tv_sec= t;
+					tval.tv_usec= 0;
+					FD_SET(s, &cset);
+
+					if ( (n= select(FD_SETSIZE, &cset, NULL, NULL, &tval) )== -1){
+						printf("Errore in select()\n");
+						close(s);
+						return -6;
+
+					} else if (n==0){
+						printf ("Timeout %d secs expired. Try again. \n ", t);
+						close(s);
+						return -7;
+					}
+
+					// 4 - Receive the bytes of the file
 					val = recv(s, answer, toRead, 0);
 					if (val==0){
 						printf("La connessione e' stata chiusa.\n");
-						return -4;
-
+						close(s);						
+						return -8;
 					} else if (val<0){
 						printf ("Error in receiving bytes from server.\n");
-						return -5;
-					} else if (val == 7){
-						// errore da parte del server
-						if(strcmp((const char*)answer, error)==0){
-							printf("-ERR \n");
-							return -6;
-						}
+						close(s);						
+						return -9;
+					} else if (strcmp((const char*)answer, error)==0){
+							printf("%s", answer);
+							close(s);
+							return -4;
 					}
 					
-					// 4 - Scrivo i bytes letti sul file 
+					// 5 - Writes the bytes received in the file 
 					if ( (written= fwrite(answer, sizeof(char), val, file_toWrite)) != val ){
 						printf("Error in writing on file \n");
-						return -7;
+						return -11;
 					}
 					tot +=val;
 					memset(answer, 0, BUFF_DIM);
+			
 				}
 				fclose(file_toWrite);
-				//printf("File '%s' closed.\n", argv[k]);
+				
+				// 6 - Timestamp
+				FD_ZERO(&cset);
+				tval.tv_sec= t;
+				tval.tv_usec= 0;
+				FD_SET(s, &cset);
 
+				if ( (n= select(FD_SETSIZE, &cset, NULL, NULL, &tval) )== -1){
+					printf("Errore in select()\n");
+					close(s);					
+					return -6;
+
+				} else if (n==0){
+					printf ("Timeout %d secs expired. Try again. \n ", t);
+					close(s);
+					return -7;
+				}
 				val = recv(s, answer, sizeof(uint32_t), 0);
 				if (val==0){
 					printf("La connessione e' stata chiusa.\n");
-					return -4;
+					close(s);
+					return -8;
 				} else if (val<0){
 					printf ("Error in receiving bytes from server.\n");
-					return -5;
-				} else if (val == 7){
-					// errore da parte del server
-					if(strcmp((const char*)answer, error)==0){
-						printf("-ERR \n");
-						return -6;
-					}
+					close(s);					
+					return -9;
+				} else if (strcmp((const char*)answer, error)==0){
+						printf("%s", answer);
+						close(s);
+						return -4;
 				}
 				
 				for(j=0; j<4; j++){
@@ -199,13 +239,11 @@ int main (int argc, char *argv[])
 						fileLastModified <<= 8;
 					}
 				}
-
+				//fileLastModified=ntohl(fileLastModified);
 				free(bufferToSend);
-
-
-
 				memset(answer, 0, BUFF_DIM);
-				printf("\nFile %s downloaded: %d bytes, %d timestamp.\n\n", argv[k], fileDimension, fileLastModified);
+				
+				printf("\nFile %s downloaded: %d bytes, %d timestamp.\n", argv[k], fileDimension, fileLastModified);
 		}
 	}
 	close(s);

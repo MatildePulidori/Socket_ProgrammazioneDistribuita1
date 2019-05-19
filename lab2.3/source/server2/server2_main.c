@@ -17,7 +17,9 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <signal.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 
 #define LISTEN_BACKLOG 15
 #define MAX_LENGTH_FILENAME 255
@@ -29,16 +31,19 @@
 
 
 
-#define MACOSX 1
+#define MACOSX 0
 #if MACOSX
 int flag = SO_NOSIGPIPE;
 #else
 int flag= MSG_NOSIGNAL;
 #endif
 
-
+void childHandler(int);
+void intHandler(int);
+void sendError(int sock, char * error);
 int sendn(int sock, uint8_t *ptr, size_t nbytes, int flags);
 char *prog_name;
+uint8_t *answer;
 
 int main (int argc, char *argv[])
 {
@@ -60,12 +65,12 @@ int main (int argc, char *argv[])
 
 	FILE *file_toFind;
 	struct stat infos;
-  	uint8_t *answer, *startptr;
+	uint8_t *startptr;  	
+	//uint8_t *answer, *startptr;
 	int tot=0, n =0, sent=0;
-	uint8_t sizeByte = 0;
 	int j=0, i=0;
 
-
+	signal(SIGINT, intHandler);
 	// APERTURA SOCKET
 	if ( (s = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) <0){
 		printf("Error in creating socket \n");
@@ -96,23 +101,24 @@ int main (int argc, char *argv[])
 		serverAddrLength = sizeof(serverAddr);
 		memset(buffer, 0, MAX_LENGTH_FILENAME+MAX_INPUT);
 		memset(answer, 0, BUFF_DIM);
-		printf("\nWaiting a connection ...\n\n");
+		printf("Waiting a connection ...\n\n");
 
 		// ACCEPT
 		if ( (sock = accept(s, (struct sockaddr *) &serverAddr, &serverAddrLength)) <0){
 			printf("Connection accept failed. \n");
 			continue;
 		}
-		
+		signal(SIGCHLD, childHandler);
 		if ((childpid=fork())<0){
 			printf("Fork failed.\n");
 			continue;
 		}else{
 			if(childpid>0){
-			close(sock);
-		} else{
+				close(sock);
+				continue;
+			} else{
 			
-			while(1){
+				while(1){
 					
 					// TIMER 15 secondi 
 					fd_set cset;
@@ -126,7 +132,7 @@ int main (int argc, char *argv[])
 						break;
 
 					} else if (n==0){
-						printf ("Timeout %d secs expired. Try again. \n ", t);
+						printf ("Timeout %d secs expired. Try again. \n", t);
 						break;
 					}
 			
@@ -135,15 +141,13 @@ int main (int argc, char *argv[])
 					
 					if ( sizeMsgReceived <0){  //Errore nella ricezione
 						printf("Error in receiving data. \n");
-						if (send(sock, error, sizeof(error), 0)!= sizeof(error)){ // vedi sopra
-							printf("Error in sending %s\n", error );
-							break;
-						}
+						sendError(sock, error);
 						break;
 					}
 					if (sizeMsgReceived == 0){ //Non c'è più nulla da leggere
 						printf("No more data to read and client closed the connection of this socket. \n\n");
 						close(sock);
+						exit(0);
 						break;
 					}
 
@@ -155,21 +159,12 @@ int main (int argc, char *argv[])
 					ptr = strstr(buffer, "GET");
 					if (ptr == NULL){
 						printf("Missing GET command. \n");
-						// TO DO -> -ERRCRLF
-						if (send(sock, error, sizeof(error), 0)!= sizeof(error)){
-							// con sizeof() non funziona perche' prendi la size del puntatore (4 byte)
-							// invece devi mettere strlen(error) sia prima che dopo il !=
-							printf("Error in sending %s\n", error );
-							break;
-						}
+						sendError(sock, error);
 						break;
 
 					} else if (ptr != buffer){
 						printf("GET command is not in the start position. \n");
-						if (send(sock, error, sizeof(error), 0)!= sizeof(error)){ // vedi sopra
-							printf("Error in sending %s\n", error );
-							break;
-						}
+						sendError(sock, error);
 						break;
 					}
 					ptr = ptr +3;
@@ -178,71 +173,58 @@ int main (int argc, char *argv[])
 					// controllo spazio dopo il GET
 					if (*ptr != ' '){
 						printf("Missing space between GET and filename. \n ");
-						if (send(sock, error, sizeof(error), 0)!= sizeof(error)){
-							printf("Error in sending %s\n", error );
-							break;
-						}
+						sendError(sock, error);
 						break;
 					}
 
-					
+					count=0;
 					ptr++; // ptr dovrebbe puntare al filename 
-					for (; (*ptr!='\r' && *(ptr+1)!='\n') && count<sizeMsgReceived; ptr++, count++);
+					for (; (*ptr!='\r' && *(ptr+1)!='\n') && count<(sizeMsgReceived-strlen("GET ")); ptr++, count++);
 
 
 					// 3- Controllo che in fondo ci sia CRLF
-					if(count>sizeMsgReceived){
+					if(count>(sizeMsgReceived-strlen("GET "))){
 						printf("Unable to find CR-LF. \n");
-						if ( send(sock, error, sizeof(error), 0) != sizeof(error)){ // vedi sopra
-							printf("Error in sending %s\n", error );
-							break;
-
-						}
-
+						sendError(sock, error);
 						break;
 					}
 
 					// 4- Aggiungo il terminatore di stringa
 					*(ptr+2)='\0';
-					ptr-=count;
+					ptr-=(count);
 					count=0;
 					
 					// 5- A questo punto mi salvo il nome del file,
 					// che poi dovro andare a cercare nella mia directory
 					if ( sscanf(ptr, "%s ", fname) != 1){ // ma questo spazio dopo %s??
 						printf ("Error in filename. \n");
-
-						if (send(sock, error, sizeof(error), 0)!= sizeof(error)){
-							printf("Error in sending %s\n", error );
-							break;
-						}
+						sendError(sock, error);
 						break;
 					}
 
 					// In fname there is the name of the file the server have to send to the client
-					printf("File name is: '%s'\n", fname);
+					// printf("File name is: '%s'\n", fname);
+
 					// Apriamo il file in lettura
 					file_toFind = fopen(fname, "rb");
 					if (file_toFind==NULL){
 						printf("File %s does not exists\n", fname );
-						if (send(sock, error, sizeof(error), 0)!= sizeof(error)){
-							printf("Error in sending %s\n", error );
-							break;
-						}
+						sendError(sock, error);
 						break;
 					}
 
 					// Informations about the file
 					if (stat(fname,  &infos) == -1){
 						printf("Error in getting informations about file %s \n", fname );
-						perror("");
+						sendError(sock, error);
 						fclose(file_toFind);
 						break;
 					}
 
 					//ANSWER TO THE CLIENT
-					if (tot + 5*sizeof(char)> BUFF_DIM){ // se +OK\r\n non entra ... errore e poi svuoto buffer answer
 
+					// 1 - +OK\r\n
+					if (tot + 5*sizeof(char)> BUFF_DIM){ 
 						if (sendn(sock, answer, tot, flag)!= tot - 5*sizeof(char)){
 							printf("Error in sending response to the client.\n");
 							break;
@@ -252,40 +234,44 @@ int main (int argc, char *argv[])
 						tot=0;
 					}
 
-					strcpy((char *)answer, "+OK\r\n");   // scrivo su buffer answer +OK\r\n
+					strcpy((char *)answer, "+OK\r\n");  
 					tot += 5*sizeof(char);
 
-					uint32_t sizeFileReceived = infos.st_size; // file dimension, in bytes
+					// 2- +OK\r\nB1.B2.B3.B4
+					uint32_t sizeFileReceived = infos.st_size; // file dimension, host byte order bytes
 					if (sizeFileReceived> 0xFFFFFFFF){
 							printf("File dimension does not fit 32bit. \n");
+							sendError(sock, error);
 							break;
 					}
-					if (tot+sizeof(uint32_t)>BUFF_DIM){ // se la dimensione del file BYTES non sta nel buffer answer ..
-						if (sendn(sock, answer, tot, flag)!= tot-sizeof(uint32_t)){ // errore e poi svuoto il buffer answer
+					if (tot+sizeof(uint32_t)>BUFF_DIM){ 
+						if (sendn(sock, answer, tot, flag)!= tot-sizeof(uint32_t)){ 
 							printf("Error in sending answer to client.\n");
+							sendError(sock, error);
 							break;
 						}
 
 						memset(answer, 0, BUFF_DIM);
 						sent+=tot;
 						tot=0;
-						j=0;
 					}
 
-					// scrivo sul buffer answer (+OK\r\n)BYTES
-					printf("File %s dimension: %u bytes\n", fname, sizeFileReceived);
-					startptr = answer; // puntatore al blocco di memoria dove viene salvata la risposta, prima di +OK\r\n
+					//printf("File %s dimension: %u bytes\n", fname, sizeFileReceived);
+					startptr = answer; 
+
 
 					j = 5;
 					int offset=24;
 					uint32_t mask  = 0xFF000000;
 
-					for(i = 0; i < 4; i++, mask >>= 8, offset -= 8, j++) {
-								sizeByte = (sizeFileReceived & mask)>>offset ;
-								answer[j] = sizeByte;
-					};
+					for(i = 0; i < 4; i++) {
+								answer[j] = (sizeFileReceived & mask)>>offset ;
+								j++;
+								offset -=8;
+								mask >>= 8;
+					}
 					tot += sizeof(uint32_t);
-					if ((tot+MAX_LINE)>=BUFF_DIM){      // invio answer +OK\r\nBYTES
+					if ((tot+MAX_LINE)>=BUFF_DIM){     
 						if(sendn(sock, answer, tot, flag)!=tot){
 							printf("Error in sending answer to client.\n");
 						}
@@ -295,27 +281,28 @@ int main (int argc, char *argv[])
 					}
 
 
-					answer += tot; // metto answer come puntatore alla stringa dopo OK\r\nBYTES
-					//printf("DOCUMENTO: \n");
-
+					answer += tot;
+					
+					// 3 - +OK\r\nB1.B2.B3.B4.data
 					while( (n = fread(answer, sizeof(char), MAX_LINE, file_toFind) ) > 0 ) {
 						tot+=n;
 						if ((tot+MAX_LINE)>=BUFF_DIM){
 							answer = startptr;
 							if (sendn(sock, answer, tot, flag)!= tot){
 								printf("Error in sending answer to client.\n");
+								sendError(sock, error);
 								break;
 							}
+							memset(answer, 0, BUFF_DIM);
 							sent+=tot;
 							tot=0;
-							memset(answer, 0, BUFF_DIM);
-
 						}else{
 							answer += n;
 						}
 					}
-					
 					answer = startptr;
+					
+					// 4 - +OK\r\nB1.B2.B3.B4.data.T1.T2.T3.T4
 					uint32_t timestampFileToSend = infos.st_ctime;
 					if (timestampFileToSend> 0xFFFFFFFF){
 							printf("File timestamp does not fit 32bit. \n");
@@ -328,6 +315,7 @@ int main (int argc, char *argv[])
 					if(tot +sizeof(uint32_t)>= BUFF_DIM){
 						if (sendn(sock, answer, tot, flag)!=tot-sizeof(uint32_t)){
 							printf("Error in sending answer to client.\n");
+							sendError(sock, error);
 							break;
 						}
 						memset(answer, 0, BUFF_DIM);
@@ -338,12 +326,18 @@ int main (int argc, char *argv[])
 							mask = 0xFF000000;
 							offset=24;
 							j=tot;
-							for(i=0; i<4; mask>>=8, offset-=8, j++, i++){
+
+							for(i=0; i<4; i++){
 								answer[j]=((timestampFileToSend & mask)>> offset);
+								j++;
+								mask >>=8;
+								offset -=8;
 							}
 							tot += sizeof(uint32_t);
+
 							if (sendn(sock, answer, tot, flag)!= tot){
-									printf("Error sending data.\n" );
+									printf("Error sending answer to the client.\n" );
+									sendError(sock, error);
 									break;
 							}
 							memset(answer, 0, BUFF_DIM);
@@ -351,10 +345,12 @@ int main (int argc, char *argv[])
 							tot=0;
 					}
 					fclose(file_toFind);
-					printf("\nFile '%s' sent all.\n\n", fname);
+					//printf("File '%s' sent all.\n\n", fname);
 
+					exit(0);
+					break;
 			}
-			exit(0);
+			
 		}
 		}
 	}
@@ -384,3 +380,21 @@ int sendn(int sock, uint8_t *ptr, size_t nbytes, int flags){
     return (nbytes - nleft);
 	}
 
+void sendError(int sock, char *error){
+
+	if (send(sock, error, strlen(error), 0)!= strlen(error)){ 
+		printf("Error in sending %s\n", error );	
+	}
+	close(sock);
+	exit(0);
+}
+
+void childHandler(int sign){
+	//int childId= wait(NULL);
+	wait(NULL);
+}
+
+void intHandler(int sign){
+	free(answer);
+	exit(0);
+}
