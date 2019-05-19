@@ -9,6 +9,7 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <signal.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
@@ -19,14 +20,15 @@
 #define BUFF_DIM 4096
 
 char *prog_name;
+char *bufferToSend;
 
 int main (int argc, char *argv[])
 {
 	struct sockaddr_in saddr;
 	int s;
 	int result;
-	char *bufferToSend;
 	uint8_t answer[BUFF_DIM];
+	
 
 	int k=3, i=0, j=0, n=0, t=15;
 	char error[] = "-ERR\r\n";
@@ -70,7 +72,6 @@ int main (int argc, char *argv[])
 		return -4;
 	}
 	
-
 	for (k=3; k<argc; k++){
 		
 		// alloco dinamicamente un buffer in cui faccio la richiesta 'GET filename\r\n'
@@ -86,9 +87,11 @@ int main (int argc, char *argv[])
 		// 1 - invio il buffer al server in cui chiedo il file
 		if( ( send( s, bufferToSend, (size_t)(4 + strlen(argv[k])*sizeof(char)+2 ), 0 )) != (size_t)(4 + strlen(argv[k])*sizeof(char) +2) ){
 			printf("Error in sending parameters to server.\n");
+			free(bufferToSend);
 			return -5;
 		}
 		memset(answer, 0, BUFF_DIM);
+		
 		
 		fileDimension=0;
 		fileLastModified=0;
@@ -105,11 +108,13 @@ int main (int argc, char *argv[])
 			if ( (n= select(FD_SETSIZE, &cset, NULL, NULL, &tval) )== -1){
 				printf("Errore in select()\n");
 				close(s);
+				free(bufferToSend);
 				return -6;
 
 			} else if (n==0){
 				printf ("Timeout %d secs expired. Try again. \n", t);
 				close(s);
+				free(bufferToSend);				
 				return -7;
 			} else {
 
@@ -118,16 +123,19 @@ int main (int argc, char *argv[])
 				if (val==0){
 					printf("Connection closed.\n");
 					close(s);
+					free(bufferToSend);
 					return -8;
 
 				} else if (val<0){
 					printf ("Error in receiving bytes from server.\n");
 					close(s);
+					free(bufferToSend);
 					return -9;
 				} else if (strcmp((const char*)answer, error)==0){
 					// errore da parte del server
 						printf("%s",error);
 						close(s);
+						free(bufferToSend);
 						return -4;
 				}
 
@@ -167,11 +175,13 @@ int main (int argc, char *argv[])
 					if ( (n= select(FD_SETSIZE, &cset, NULL, NULL, &tval) )== -1){
 						printf("Errore in select()\n");
 						close(s);
+						free(bufferToSend);
 						return -6;
 
 					} else if (n==0){
 						printf ("Timeout %d secs expired. Try again. \n ", t);
 						close(s);
+						free(bufferToSend);
 						return -7;
 					}
 
@@ -179,21 +189,25 @@ int main (int argc, char *argv[])
 					val = recv(s, answer, toRead, 0);
 					if (val==0){
 						printf("La connessione e' stata chiusa.\n");
-						close(s);						
+						close(s);
+						free(bufferToSend);						
 						return -8;
 					} else if (val<0){
 						printf ("Error in receiving bytes from server.\n");
-						close(s);						
+						close(s);
+						free(bufferToSend);						
 						return -9;
 					} else if (strcmp((const char*)answer, error)==0){
 							printf("%s", answer);
 							close(s);
+							free(bufferToSend);
 							return -4;
 					}
 					
 					// 5 - Writes the bytes received in the file 
 					if ( (written= fwrite(answer, sizeof(char), val, file_toWrite)) != val ){
 						printf("Error in writing on file \n");
+						free(bufferToSend);					
 						return -11;
 					}
 					tot +=val;
@@ -211,25 +225,30 @@ int main (int argc, char *argv[])
 				if ( (n= select(FD_SETSIZE, &cset, NULL, NULL, &tval) )== -1){
 					printf("Errore in select()\n");
 					close(s);					
+					free(bufferToSend);
 					return -6;
 
 				} else if (n==0){
 					printf ("Timeout %d secs expired. Try again. \n ", t);
 					close(s);
+					free(bufferToSend);
 					return -7;
 				}
 				val = recv(s, answer, sizeof(uint32_t), 0);
 				if (val==0){
 					printf("La connessione e' stata chiusa.\n");
 					close(s);
+					free(bufferToSend);					
 					return -8;
 				} else if (val<0){
 					printf ("Error in receiving bytes from server.\n");
-					close(s);					
+					close(s);
+					free(bufferToSend);					
 					return -9;
 				} else if (strcmp((const char*)answer, error)==0){
 						printf("%s", answer);
 						close(s);
+						free(bufferToSend);
 						return -4;
 				}
 				
@@ -239,7 +258,7 @@ int main (int argc, char *argv[])
 						fileLastModified <<= 8;
 					}
 				}
-				//fileLastModified=ntohl(fileLastModified);
+				
 				free(bufferToSend);
 				memset(answer, 0, BUFF_DIM);
 				
@@ -249,3 +268,4 @@ int main (int argc, char *argv[])
 	close(s);
 	return 0;
 }
+
